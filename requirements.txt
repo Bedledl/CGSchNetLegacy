@@ -1,0 +1,4 @@
+schnetpack @ git+https://github.com/Bedledl/schnetpack_ipu.git@ipu_compatibility
+torchmd-net @ git+https://github.com/torchmd/torchmd-net-legacy.git
+torchmd-cg @ git+https://github.com/torchmd/torchmd-cg.git
+
