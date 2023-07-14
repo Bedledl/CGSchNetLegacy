@@ -6,13 +6,13 @@ method and use the poptorch.for_loop method as main simulation loop.
 """
 import torch
 import poptorch
-from schnetpack import Simulator
+from schnetpack.md import Simulator
 from contextlib import nullcontext
 
 from tqdm import trange
 
 
-class IPUSimulator(torch.nn.Module):
+class IPUSimulator(Simulator):
     def simulate(self, n_steps: int):
         raise NotImplementedError("Please use the forward method to start the simulation.")
 
