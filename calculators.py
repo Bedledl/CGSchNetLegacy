@@ -9,7 +9,7 @@ from schnetpack.md.neighborlist_md import NeighborListMD
 from schnetpack.properties import n_molecules, idx_i, idx_j, offsets
 
 
-class SchNetPackCalcIpu(SchNetPackCalculator):
+class SchNetPackCalcIPU(SchNetPackCalculator):
     def __init__(
             self,
             model_file: str,

@@ -1,17 +1,19 @@
 from schnetpack import properties
 from schnetpack.md import System, UniformInit, Simulator
-from schnetpack.md.integrators import Integrator
+from schnetpack.md.integrators import VelocityVerlet
 from schnetpack.md.simulation_hooks import MoleculeStream, PropertyStream, FileLogger, LangevinThermostat
 
 from simulation_utils import get_calculator, get_molecule_obj, fill_system_with_amino_mol
 
+# TODO verlagere in anderen File
+from train_chignolin import DummyCutoff, AddRequiredProps
 
 cutoff = 5.
 cutoff_shell = 2.
 model_path = "train_chignolin/best_inference_model"
 device = "cpu"
 time_step = 0.5
-pdb_file = "chignolin_cln025.pdb"
+pdb_file = "data/chignolin_cln025.pdb"
 topology = "data/chignolin_ca_top.psf"
 coordinates = "data/chignolin_ca_initial_coords.xtc"
 forcefield = "data/chignolin_priors_fulldata.yaml"
@@ -30,7 +32,7 @@ def main():
         None
     )
 
-    md_integrator = Integrator(time_step)
+    md_integrator = VelocityVerlet(time_step)
     md_system = System()
     fill_system_with_amino_mol(md_system, amino_mol)
 
@@ -77,3 +79,7 @@ def main():
     )
 
     md_simulator.simulate(10)
+
+
+if __name__ == "__main__":
+    main()

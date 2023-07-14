@@ -15,7 +15,7 @@ from schnetpack.md.neighborlist_md import NeighborListMD
 from schnetpack.md.simulation_hooks import MoleculeStream, FileLogger, PropertyStream
 from schnetpack.md.simulation_hooks.thermostats import LangevinThermostat
 from schnetpack.transform import KNNNeighborList, ASENeighborList, CompleteNeighborList
-from SchNetPackCalcIpu import MultiSimCalc, SchNetPackCalcCPU, SchNetPackCalcIPU
+from calculators import MultiSimCalc, SchNetPackCalcCPU, SchNetPackCalcIPU
 
 from moleculekit.molecule import Molecule
 from torchmd_cg.utils.psfwriter import pdb2psf_CA
@@ -77,7 +77,7 @@ def get_calculator(model_path, device, cutoff, cutoff_shell, pipe_endpoint):
 def get_molecule_obj(pdb_file):
     atom_level_mol = Molecule(pdb_file)
 
-    with tempfile.NamedTemporaryFile() as psf_tmp_file:
+    with tempfile.NamedTemporaryFile(suffix=".psf") as psf_tmp_file:
         pdb2psf_CA(pdb_file, psf_tmp_file.name)
         amino_level_mol = Molecule(psf_tmp_file.name)
 
@@ -108,16 +108,16 @@ def fill_system_with_amino_mol(system: System, mol: Molecule):
     """
     # fill in basic values from molecule
     system.n_replicas = 1
-    system.n_molecules = 1,
-    system.n_atoms = torch.tensor([mol.numAtoms])
+    system.n_molecules = 1
+    system.n_atoms = torch.tensor([mol.numAtoms], dtype=torch.int32)
     system.total_n_atoms = mol.numAtoms
 
     # initialize index vector for aggregation
-    system.index_m = torch.zeros(system.total_n_atoms)
+    system.index_m = torch.zeros(system.total_n_atoms, dtype=torch.int32)
     # we have only one molecule, therefore index 0 for every atom/amino is fine
 
     # 3) Construct basic property arrays
-    system.atom_types = torch.zeros(system.total_n_atoms)
+    system.atom_types = torch.zeros(system.total_n_atoms, dtype=torch.int32)
     system.masses = torch.zeros(1, system.total_n_atoms, 1)
 
     # Relevant for dynamic properties: positions, momenta, forces
@@ -140,6 +140,6 @@ def fill_system_with_amino_mol(system: System, mol: Molecule):
 
         system.masses[0, index, 0] = mol.masses[index] * mass2internal
 
-    system.positions[0] = mol.coords.squeeze() * positions2internal
+    system.positions[0] = torch.from_numpy(mol.coords.squeeze()) * positions2internal
 
     # TODO we do not need cells and pbc in out case so just leave it constant
