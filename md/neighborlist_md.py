@@ -41,7 +41,6 @@ class IPUNeighborListMD(NeighborListMD, torch.nn.Module):
         atom_types = inputs[properties.Z]
         positions = inputs[properties.R]
         n_atoms = inputs[properties.n_atoms]
-        idx_m = inputs[properties.idx_m]
         cells = inputs[properties.cell]
         pbc = inputs[properties.pbc]
         n_molecules = inputs[properties.n_molecules]
