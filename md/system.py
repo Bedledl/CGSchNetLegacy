@@ -9,11 +9,21 @@ from typing import Union, List
 from moleculekit.molecule import Molecule
 from schnetpack.md import System
 import schnetpack.units
+from schnetpack.md.utils import NormalModeTransformer
 
 from simulation_utils import AA2INT
 
 
 class IPUSystem(System):
+    def __init__(
+            self, normal_mode_transform: NormalModeTransformer = NormalModeTransformer
+    ):
+        super(IPUSystem, self).__init__(normal_mode_transform)
+        self.index_m = self.index_m.to(torch.int32)
+        self.n_atoms = self.n_atoms.to(torch.int32)
+        self.atom_types = self.atom_types.to(torch.int32)
+        self._dd_dummy = self._dd_dummy.to(torch.float32)
+
     def load_molecules(self,
                        molecules: Union[Molecule, List[Molecule]],
                        n_replicas: int = 1,
@@ -81,3 +91,8 @@ class IPUSystem(System):
 
         # Set normal mode transformer
         self.nm_transform = self._nm_transformer(n_replicas)
+
+    def to(self, device):
+        new_self = super(IPUSystem, self).to(device)
+        new_self._dd_dummy = new_self._dd_dummy.to(device)
+        return new_self
