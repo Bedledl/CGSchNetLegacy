@@ -48,6 +48,7 @@ class IPUSimulator(Simulator):
 
         self.step += 1
         self.effective_steps += 1
+        return [torch.zeros(1)]
 
     def forward(self, n_steps):
         self.n_steps = n_steps
@@ -70,13 +71,16 @@ class IPUSimulator(Simulator):
             for hook in self.simulator_hooks:
                 hook.on_simulation_start(self)
 
-            poptorch.for_loop(self.n_steps, self.__simulation_loop())
+            poptorch.for_loop(self.n_steps, self.__simulation_loop, [])
 
             # Call hooks at the simulation end
             for hook in self.simulator_hooks:
                 hook.on_simulation_end(self)
 
         return self.system.positions
+
+    def state_dict(self, *args, **kwargs):
+        return torch.nn.Module.state_dict(self, *args, **kwargs)
 
     def to(self, device):
         new_self = super(IPUSimulator, self).to(device)
