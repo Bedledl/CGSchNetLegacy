@@ -1,9 +1,15 @@
 from schnetpack import properties
-from schnetpack.md import System, UniformInit, Simulator
+from schnetpack.md import UniformInit
 from schnetpack.md.integrators import VelocityVerlet
 from schnetpack.md.simulation_hooks import MoleculeStream, PropertyStream, FileLogger, LangevinThermostat
 
-from simulation_utils import get_calculator, get_molecule_obj, fill_system_with_amino_mol
+from md.system import IPUSystem
+from simulation_utils import get_calculator, get_molecule_obj
+
+import torch
+import poptorch
+
+from md.simulator import IPUSimulator
 
 # TODO verlagere in anderen File
 from train_chignolin import DummyCutoff, AddRequiredProps
@@ -33,8 +39,8 @@ def main():
     )
 
     md_integrator = VelocityVerlet(time_step)
-    md_system = System()
-    fill_system_with_amino_mol(md_system, amino_mol)
+    md_system = IPUSystem()
+    md_system.load_molecules(amino_mol)
 
     # Initializes the system momenta according to a uniform distribution
     # scaled to the given temperature.
@@ -66,19 +72,27 @@ def main():
     # build simulator_hooks
     simulator_hooks = [
         thermostat,
-        file_logger
+#        file_logger
     ]
 
     # And now, we can create the Simulator Object which has pointers to all the
     # other components like Integrator or Calculator
-    md_simulator = Simulator(
+    md_simulator = IPUSimulator(
         md_system,
         md_integrator,
         md_calculator,
         simulator_hooks=simulator_hooks
     )
 
-    md_simulator.simulate(10)
+    md_simulator(1)
+
+    md_simulator = md_simulator.to(torch.float32)
+
+    md_simulator = poptorch.inferenceModel(md_simulator)
+
+    result = md_simulator(10)
+    print(result)
+    #md_simulator.simulate(10)
 
 
 if __name__ == "__main__":
