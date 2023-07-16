@@ -7,7 +7,7 @@ from schnetpack.md.calculators import SchNetPackCalculator
 from schnetpack.md.neighborlist_md import NeighborListMD
 
 
-class SchNetPackCalcIPU(SchNetPackCalculator):
+class IPUSchNetPackCalc(SchNetPackCalculator):
     def __init__(
             self,
             model_file: str,
@@ -21,7 +21,7 @@ class SchNetPackCalcIPU(SchNetPackCalculator):
             property_conversion: Dict[str, Union[str, float]] = {},
             script_model: bool = False,
     ):
-        super(SchNetPackCalcCPU, self).__init__(
+        super(IPUSchNetPackCalc, self).__init__(
             model_file,
             force_key,
             energy_unit,
@@ -57,12 +57,12 @@ class SchNetPackCalcIPU(SchNetPackCalculator):
         self._update_system(system)
 
     def _generate_input(self, system: System) -> Dict[str, torch.Tensor]:
-        inputs = super(SchNetPackCalcIPU, self)._generate_input(system)
+        inputs = super(IPUSchNetPackCalc, self)._generate_input(system)
         inputs[properties.n_molecules] = system.n_molecules
 
         return inputs
 
     def to(self, device):
-        new_self = super(SchNetPackCalcIPU, self).to(device)
+        new_self = super(IPUSchNetPackCalc, self).to(device)
         new_self.neighbor_list = new_self.neighbor_list.to(device)
         return new_self
