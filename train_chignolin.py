@@ -4,6 +4,7 @@ import schnetpack as spk
 import schnetpack.transform as trn
 import torchmetrics
 import torchmdnet
+from schnetpack import properties
 from torchmdnet import datasets
 from torchmdnet.utils import make_splits
 from torch.utils.data import Subset
@@ -11,6 +12,8 @@ import torch
 
 import torch_geometric.data.data
 from typing import Dict
+
+from md.neighborlist import KNNNeighborList
 
 n_atom_basis = 32
 energy_key = "energy"
@@ -33,19 +36,13 @@ class AddRequiredProps(trn.Transform):
         self,
         inputs: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        print("-----------------------------")
-        print("Add Required Props")
-        print(inputs)
+
         inputs[spk.properties.cell] = torch.zeros(1, 3, 3)
         inputs[spk.properties.pbc] = torch.zeros(1, 3).bool()
-        print(inputs)
-        print("")
-        print("-------------------------------------")
         return inputs
 
 
 def create_model():
-    neighborlist = trn.KNNNeighborList(5)
     pairwise_distance = spk.atomistic.PairwiseDistances()
     pred_energy = spk.atomistic.Atomwise(n_in=n_atom_basis, output_key=energy_key)
     pred_forces = spk.atomistic.Forces(energy_key=energy_key, force_key=forces_key)
@@ -58,7 +55,7 @@ def create_model():
 
     nnpot = spk.model.NeuralNetworkPotential(
         representation=schnet,
-        input_modules=[AddRequiredProps(), neighborlist, pairwise_distance],
+        input_modules=[pairwise_distance],#[AddRequiredProps(), neighborlist, pairwise_distance],
         output_modules=[pred_energy, pred_forces],
         postprocessors=[
             trn.CastTo64(),
@@ -120,6 +117,7 @@ class SchNetTorchMDDataModule(spk.data.AtomsDataModule):
             raise AttributeError("Please add a torch_geometric.data.Dataset as dataset argument in kwargs.")
 
         self.dataset = dataset
+        self.dataset.transforms = transforms
 
     def setup(self, stage=None):
         self.train_idx, self.val_idx, self.test_idx = make_splits(
@@ -139,18 +137,25 @@ class SchNetTorchMDDataModule(spk.data.AtomsDataModule):
 class CustomDatasetSchnetpack(torchmdnet.datasets.Custom):
     def get(self, idx):
         data_obj = super(CustomDatasetSchnetpack, self).get(idx)
-        return {
+        inputs = {
             spk.properties.Z: data_obj.z,
             spk.properties.position: data_obj.pos,
             spk.properties.forces: data_obj.neg_dy,
             spk.properties.n_atoms: torch.tensor([len(data_obj.z)]),
+            spk.properties.idx_m: torch.zeros(len(data_obj.z)),
             spk.properties.n_molecules: torch.tensor(1),
-            spk.properties.idx_m: torch.zeros(len(data_obj.z))
         }
+
+        for trns in self.transforms:
+            inputs = trns(inputs)
+
+        return inputs
 
 
 def create_chignolin_datamodule(coord_file, embed_file, force_file):
     transforms = [
+        AddRequiredProps(),
+        KNNNeighborList(5),
 #        trn.RemoveOffsets(energy_key, remove_mean=True, remove_atomrefs=False),
         trn.CastTo32()
     ]
