@@ -1,4 +1,4 @@
-from md.neighborlist import KNNNeighborList
+from utils.neighborlist import KNNNeighborList
 
 from moleculekit.molecule import Molecule
 from torchmd_cg.utils.psfwriter import pdb2psf_CA

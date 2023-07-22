@@ -1,10 +1,14 @@
+import logging
 from typing import Union, List, Dict
 
 import torch
 from schnetpack import properties
 from schnetpack.md import System
-from schnetpack.md.calculators import SchNetPackCalculator
+from schnetpack.md.calculators import SchNetPackCalculator, MDCalculator
 from schnetpack.md.neighborlist_md import NeighborListMD
+
+from utils.neighborlist import KNNNeighborList, knn_neighborlist_transfo
+log = logging.getLogger(__name__)
 
 
 class IPUSchNetPackCalc(SchNetPackCalculator):
@@ -20,25 +24,69 @@ class IPUSchNetPackCalc(SchNetPackCalculator):
             required_properties: List = [],
             property_conversion: Dict[str, Union[str, float]] = {},
             script_model: bool = False,
+            device="cpu",
+            dtype=torch.float64
     ):
-        super(IPUSchNetPackCalc, self).__init__(
-            model_file,
+        self.script_model = script_model
+        MDCalculator.__init__(
+            self,
+            required_properties,
             force_key,
             energy_unit,
             position_unit,
-            neighbor_list,
             energy_key,
             stress_key,
-            required_properties,
             property_conversion,
-            script_model
         )
-        self.idx_i = None
-        self.idx_j = None
-        self.offsets = None
+        self.register_module("neighbor_list", neighbor_list)
+        model = self._prepare_model(model_file).to(torch.float32)
+        self.register_module("model", model)
+        #self.model = self._prepare_model(model_file).to(torch.float32)
 
-        self.steps = 0
-        self.d = 0
+        #self.model = self._prepare_model(model_file)
+        self.neighborlist_transform = KNNNeighborList(5)
+
+    def _get_system_molecules(self, system: System):
+        """
+        Routine to extract positions, atom_types and atom_masks formatted in a manner suitable for schnetpack models
+        from the system class. This is done by collapsing the replica and molecule dimension into one batch dimension.
+
+        Args:
+            system (schnetpack.md.System): System object containing current state of the simulation.
+
+        Returns:
+            dict(str, torch.Tensor): Input batch for schnetpack models without neighbor information.
+        """
+        # Get atom types
+        atom_types = system.atom_types.repeat(system.n_replicas)
+
+        # Get n_atoms
+        n_atoms = system.n_atoms.repeat(system.n_replicas)
+
+        # Get positions
+        positions = system.positions.view(-1, 3) / self.position_conversion
+
+        # Construct index vector for all replicas and molecules
+        index_m = (
+            system.index_m.repeat(system.n_replicas, 1)
+            + system.n_molecules
+            * torch.arange(system.n_replicas, device=system.device).unsqueeze(-1)
+        ).view(-1)
+
+        # Get cells and PBC
+        cells = system.cells.view(-1, 3, 3) / self.position_conversion
+        pbc = system.pbc.repeat(system.n_replicas, 1, 1).view(-1, 3)
+
+        inputs = {
+            properties.Z: atom_types,
+            properties.n_atoms: n_atoms,
+            properties.R: positions,
+            properties.idx_m: index_m,
+            properties.cell: cells,
+            properties.pbc: pbc,
+        }
+
+        return inputs
 
     def calculate(self, system: System):
         """
@@ -54,7 +102,29 @@ class IPUSchNetPackCalc(SchNetPackCalculator):
         """
         inputs = self._generate_input(system)
         self.results = self.model(inputs)
+        return self.results
         self._update_system(system)
+
+    def calculate_in_loop(self, positions, momenta, forces, energy, atom_types, n_atoms, n_mol,
+                          index_m, pbc, cells, total_n_atoms):
+        idx_i, idx_j, offsets = knn_neighborlist_transfo(positions, index_m, 5)
+
+        inputs = {
+            properties.Z: atom_types,
+            properties.n_atoms: n_atoms,
+            properties.R: positions,
+            properties.idx_m: index_m,
+            properties.cell: cells,
+            properties.pbc: pbc,
+            properties.n_molecules: 1,
+            properties.idx_i: idx_i,
+            properties.idx_j: idx_j,
+            properties.offsets: offsets,
+        }
+        result_dict = self.model(inputs)
+        forces = result_dict[properties.forces]
+        energy = result_dict[properties.energy]
+        return positions, momenta, forces, energy, atom_types, n_atoms, n_mol, index_m, pbc, cells, total_n_atoms
 
     def _generate_input(self, system: System) -> Dict[str, torch.Tensor]:
         inputs = super(IPUSchNetPackCalc, self)._generate_input(system)
@@ -62,7 +132,8 @@ class IPUSchNetPackCalc(SchNetPackCalculator):
 
         return inputs
 
-    def to(self, device):
-        new_self = super(IPUSchNetPackCalc, self).to(device)
-        new_self.neighbor_list = new_self.neighbor_list.to(device)
+    def to(self, arg):
+        new_self = super(IPUSchNetPackCalc, self).to(arg)
+        print(f"to method of IPUSchNetPackCalc {arg}")
         return new_self
+

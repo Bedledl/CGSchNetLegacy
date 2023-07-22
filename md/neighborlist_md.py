@@ -26,8 +26,9 @@ class IPUNeighborListMD(torch.nn.Module, NeighborListMD):
             collate_fn: callable = _atoms_collate_fn,
     ):
         torch.nn.Module.__init__(self)
-        NeighborListMD.__init__(
-            self, cutoff, cutoff_shell, base_nbl, requires_triples, collate_fn)
+        NeighborListMD.__init__(self,
+        #super(IPUNeighborListMD, self).__init__(
+            cutoff, cutoff_shell, base_nbl, requires_triples, collate_fn)
 
     def get_neighbors(self, inputs: Dict[str, torch.Tensor]):
         """
@@ -40,7 +41,6 @@ class IPUNeighborListMD(torch.nn.Module, NeighborListMD):
             torch.tensor: indices of neighbors.
         """
         return self.transform(inputs)
-
 
         atom_types = inputs[properties.Z]
         positions = inputs[properties.R]
@@ -72,7 +72,7 @@ class IPUNeighborListMD(torch.nn.Module, NeighborListMD):
         del neighbor_idx[properties.n_atoms]
 
         # Move everything to correct device
-        neighbor_idx = {p: neighbor_idx[p].to(positions.device) for p in neighbor_idx}
+        neighbor_idx = {p: neighbor_idx[p].to(device=positions.device) for p in neighbor_idx}
 
         # we leave out filter_indices()
 
@@ -126,8 +126,3 @@ class IPUNeighborListMD(torch.nn.Module, NeighborListMD):
             input_batch.append(inputs)
 
         return input_batch
-
-    def to(self, device):
-        new_self = super(IPUNeighborListMD, self).to(device)
-        #new_self.previous_positions = new_self.previous_positions.to(device)
-        return new_self

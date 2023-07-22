@@ -4,16 +4,14 @@ import schnetpack as spk
 import schnetpack.transform as trn
 import torchmetrics
 import torchmdnet
-from schnetpack import properties
-from torchmdnet import datasets
 from torchmdnet.utils import make_splits
 from torch.utils.data import Subset
 import torch
 
-import torch_geometric.data.data
 from typing import Dict
 
-from md.neighborlist import KNNNeighborList
+from utils.neighborlist import KNNNeighborList
+from utils.ShiftedSofplusIPU import ShiftedSoftplus
 
 n_atom_basis = 32
 energy_key = "energy"
@@ -25,12 +23,6 @@ forces = "data/chignolin_ca_forces.npy"
 embeddings = "data/chignolin_ca_embeddings.npy"
 
 
-class DummyCutoff(torch.nn.Identity):
-    def __init__(self, cutoff):
-        super(DummyCutoff, self).__init__()
-        self.cutoff = cutoff
-
-
 class AddRequiredProps(trn.Transform):
     def forward(
         self,
@@ -38,7 +30,7 @@ class AddRequiredProps(trn.Transform):
     ) -> Dict[str, torch.Tensor]:
 
         inputs[spk.properties.cell] = torch.zeros(1, 3, 3)
-        inputs[spk.properties.pbc] = torch.zeros(1, 3).bool()
+        inputs[spk.properties.pbc] = torch.zeros(3).bool()
         return inputs
 
 
@@ -50,7 +42,8 @@ def create_model():
     schnet = spk.representation.SchNet(
         n_atom_basis=n_atom_basis, n_interactions=3,
         radial_basis=radial_basis,
-        cutoff_fn=DummyCutoff(cutoff)
+        cutoff_fn=DummyCutoff(cutoff),
+        activation=ShiftedSoftplus(),
     )
 
     nnpot = spk.model.NeuralNetworkPotential(
